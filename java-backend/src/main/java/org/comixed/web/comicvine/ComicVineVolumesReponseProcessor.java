@@ -19,12 +19,18 @@
 
 package org.comixed.web.comicvine;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.comixed.web.model.ComicVolume;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * <code>ComicVineVolumesReponseProcessor</code> represents a single volume
@@ -35,87 +41,100 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @author Darryl L. Pierce
  *
  */
+@Component
 public class ComicVineVolumesReponseProcessor
 {
-    @JsonProperty(value = "error")
-    String statusText;
+    @Autowired
+    private ObjectMapper objectMapper;
 
-    @JsonProperty(value = "limit")
-    int limit;
-
-    @JsonProperty(value = "offset")
-    int page;
-
-    @JsonProperty(value = "number_of_page_results")
-    int totalPages;
-
-    @JsonProperty(value = "number_of_total_results")
-    int totalResults;
-
-    @JsonProperty(value = "status_code")
-    int statusCode;
-
-    @JsonProperty(value = "results")
-    private List<ComicVineVolume> volumes = new ArrayList<>();
-
-    public int getLimit()
+    static class ComicVineVolumesReponseContainer
     {
-        return this.limit;
-    }
+        @JsonProperty(value = "error")
+        String statusText;
 
-    public int getPage()
-    {
-        return this.page;
-    }
+        @JsonProperty(value = "limit")
+        int limit;
 
-    public int getStatusCode()
-    {
-        return this.statusCode;
-    }
+        @JsonProperty(value = "offset")
+        int page;
 
-    public String getStatusText()
-    {
-        return this.statusText;
-    }
+        @JsonProperty(value = "number_of_page_results")
+        int totalPages;
 
-    public int getTotalPages()
-    {
-        return this.totalPages;
-    }
+        @JsonProperty(value = "number_of_total_results")
+        int totalResults;
 
-    public int getTotalResults()
-    {
-        return this.totalResults;
-    }
+        @JsonProperty(value = "status_code")
+        int statusCode;
 
-    public List<ComicVineVolume> getVolumes()
-    {
-        return this.volumes;
-    }
+        @JsonProperty(value = "results")
+        private List<ComicVineVolume> volumes = new ArrayList<>();
 
-    public List<ComicVolume> transform()
-    {
-        List<ComicVolume> result = new ArrayList<ComicVolume>();
-
-        for (ComicVineVolume volume : this.volumes)
+        public int getLimit()
         {
-            /*
-             * there is an existing bug in the ComicVine APIs where it's
-             * returning 1 less than the total number of issues for a volume
-             */
-            ComicVolume entry = new ComicVolume();
-
-            entry.setId(volume.getId());
-            entry.setName(volume.getName());
-            entry.setIssueCount(volume.getIssueCount() + 1);
-            entry.setImageURL(volume.getImageURL());
-            entry.setStartYear(volume.getStartYear());
-            entry.setPublisher(volume.getPublisher());
-
-            result.add(entry);
+            return this.limit;
         }
 
-        return result;
+        public int getPage()
+        {
+            return this.page;
+        }
+
+        public int getStatusCode()
+        {
+            return this.statusCode;
+        }
+
+        public String getStatusText()
+        {
+            return this.statusText;
+        }
+
+        public int getTotalPages()
+        {
+            return this.totalPages;
+        }
+
+        public int getTotalResults()
+        {
+            return this.totalResults;
+        }
+
+        public List<ComicVineVolume> getVolumes()
+        {
+            return this.volumes;
+        }
+
+        public List<ComicVolume> transform()
+        {
+            List<ComicVolume> result = new ArrayList<ComicVolume>();
+
+            for (ComicVineVolume volume : this.volumes)
+            {
+                /*
+                 * there is an existing bug in the ComicVine APIs where it's
+                 * returning 1 less than the total number of issues for a volume
+                 */
+                ComicVolume entry = new ComicVolume();
+
+                entry.setId(volume.getId());
+                entry.setName(volume.getName());
+                entry.setIssueCount(volume.getIssueCount() + 1);
+                entry.setImageURL(volume.getImageURL());
+                entry.setStartYear(volume.getStartYear());
+                entry.setPublisher(volume.getPublisher());
+
+                result.add(entry);
+            }
+
+            return result;
+        }
+
+        public boolean isLastPage()
+        {
+            // TODO Auto-generated method stub
+            return false;
+        }
     }
 
     /**
@@ -132,7 +151,23 @@ public class ComicVineVolumesReponseProcessor
      */
     public boolean process(List<ComicVolume> volumes, byte[] content) throws ComicVineAdaptorException
     {
-        // TODO Auto-generated method stub
-        return true;
+        boolean result = true;
+
+        try
+        {
+            // TODO there HAS to be a better way to configure this
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            ComicVineVolumesReponseContainer response = objectMapper.readValue(content,
+                                                                               ComicVineVolumesReponseContainer.class);
+
+            volumes.addAll(response.transform());
+            result = response.isLastPage();
+        }
+        catch (IOException error)
+        {
+            throw new ComicVineAdaptorException("failed to process volume response", error);
+        }
+
+        return result;
     }
 }
